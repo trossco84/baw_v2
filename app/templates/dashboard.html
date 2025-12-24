@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+  <div class="title">
+    <div>
+      <h1>BAW Weekly Close</h1>
+      <div class="sub">Equal split summary + per-player payouts</div>
+    </div>
+    <div class="pill">
+    Book total: <b>{{ "{:,.2f}".format(book_total) }}</b> · Final balance: <b>{{ "{:,.2f}".format(final_balance) }}</b>
+    </div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="grid">
+    {% for agent_name in agent_names %}
+      {% set a = agents[agent_name] %}
+      <div class="card">
+        <h3>{{ agent_name }}</h3>
+
+        <div class="metric">
+        <div class="k">Players</div>
+        <div class="v">{{ a.num_players }}</div>
+        </div>
+
+        <div class="metric">
+        <div class="k">Net</div>
+        <div class="v {% if a.net >= 0 %}pos{% else %}neg{% endif %}">
+            {{ "{:,.2f}".format(a.net) }}
+        </div>
+        </div>
+
+        <div class="metric">
+        <div class="k">Final balance</div>
+        <div class="v">{{ "{:,.2f}".format(a.final_balance) }}</div>
+        </div>
+        
+      </div>
+    {% endfor %}
+  </div>
+
+<div class="card" style="margin-top: 12px;">
+  <h3>Settlement Transfers</h3>
+
+  {% if transfers and transfers|length > 0 %}
+    <table class="table" style="margin-top: 8px;">
+      <thead>
+        <tr>
+          <th>From</th>
+          <th>To</th>
+          <th class="right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transfers %}
+          <tr>
+            <td><b>{{ t.from }}</b></td>
+            <td><b>{{ t.to }}</b></td>
+            <td class="right">{{ "{:,.2f}".format(t.amount) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="footer-note">
+      This is the simplest way to equalize everyone’s take for the week.
+    </div>
+  {% else %}
+    <div class="muted">No transfers needed — everyone is even.</div>
+  {% endif %}
+</div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="pill">View details for one agent.</div>
+    <form method="get">
+      <select name="agent" onchange="this.form.submit()">
+        {% for name in agent_names %}
+          <option value="{{ name }}" {% if name == selected_agent %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+
+  <!-- Agent detail table -->
+  {% if selected_agent %}
+    {% set a = agents[selected_agent] %}
+    <div class="card" style="padding:0;">
+      <table class="table">
+        <thead>
+        <tr>
+            <th style="width: 46%;">Player</th>
+            <th style="width: 14%;">Action</th>
+            <th class="right" style="width: 28%;">Amount</th>
+            <th class="center tiny">Engaged</th>
+            <th class="center tiny">Paid</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for p in a.players %}
+            <tr class="{% if p.paid %}paid{% elif p.engaged %}engaged{% endif %}">
+            <td>
+                <b>{{ p.display_name }}</b>
+                <div class="muted" style="font-size:12px;">{{ p.player_id }}</div>
+            </td>
+
+            <td>
+                {% if p.action == "Pay" %}
+                <span class="action-pay">Pay</span>
+                {% else %}
+                <span class="action-req">Request</span>
+                {% endif %}
+            </td>
+
+            <td class="right">
+                {{ "{:,.2f}".format(p.abs_amount) }}
+            </td>
+
+            <td class="center tiny">
+                <input type="checkbox"
+                    {% if p.engaged %}checked{% endif %}
+                    onchange="toggleStatus('{{ p.week_id }}','{{ p.player_id }}','engaged', this.checked)">
+            </td>
+
+            <td class="center tiny">
+                <input type="checkbox"
+                    {% if p.paid %}checked{% endif %}
+                    onchange="toggleStatus('{{ p.week_id }}','{{ p.player_id }}','paid', this.checked)">
+            </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">
+      Tip: “Pay” means you pay the player. “Request” means the player owes you.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,138 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BAW v2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root{
+        --bg:#0b1020;
+        --card:#111a33;
+        --muted:#9fb0d0;
+        --text:#eaf0ff;
+        --border:rgba(255,255,255,.08);
+        --green:#30d158;
+        --red:#ff453a;
+        --yellow:#ffd60a;
+        --blue:#64d2ff;
+      }
+      body{
+        margin:0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        background: linear-gradient(180deg, #070b16 0%, #0b1020 100%);
+        color:var(--text);
+      }
+      .wrap{ max-width: 1100px; margin: 0 auto; padding: 28px 18px 60px; }
+      .title{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom: 18px; }
+      h1{ font-size: 26px; margin:0; letter-spacing: .2px; }
+      .sub{ color:var(--muted); font-size: 13px; }
+      .grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      @media (max-width: 900px){ .grid{ grid-template-columns: 1fr; } }
+
+      .card{
+        background: rgba(17,26,51,.85);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 14px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      }
+      .card h3{ margin:0 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
+      .metric{ display:flex; justify-content:space-between; gap:8px; padding: 6px 0; border-top: 1px solid var(--border); }
+      .metric:first-of-type{ border-top: none; }
+      .metric .k{ color: var(--muted); font-size: 13px; }
+      .metric .v{ font-variant-numeric: tabular-nums; font-size: 14px; }
+      .pill{
+        display:inline-flex; align-items:center; gap:8px;
+        padding: 6px 10px; border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255,255,255,.04);
+        font-size: 12px; color: var(--muted);
+      }
+
+      .controls{
+        display:flex; align-items:center; justify-content:space-between; gap: 12px;
+        margin: 18px 0 10px;
+      }
+      select{
+        background: rgba(255,255,255,.06);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 14px;
+        outline: none;
+      }
+      .table{
+        width:100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow:hidden;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: rgba(17,26,51,.7);
+      }
+      th, td{
+        padding: 10px 12px;
+        text-align:left;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+      th{ color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; }
+      tr:last-child td{ border-bottom: none; }
+      .right{ text-align:right; font-variant-numeric: tabular-nums; }
+      .muted{ color: var(--muted); }
+      .pos{ color: var(--green); }
+      .neg{ color: var(--red); }
+      .action-pay{ background: rgba(48,209,88,.12); border: 1px solid rgba(48,209,88,.25); color: var(--green); padding: 4px 8px; border-radius: 999px; font-size: 12px; }
+      .action-req{ background: rgba(255,69,58,.12); border: 1px solid rgba(255,69,58,.25); color: var(--red); padding: 4px 8px; border-radius: 999px; font-size: 12px; }
+      .footer-note{ margin-top: 14px; color: var(--muted); font-size: 12px; }
+      .center {
+        text-align: center;
+      }
+      .tiny {
+        width: 1%;
+        white-space: nowrap;
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+      }
+      input[type="checkbox"] {
+        transform: scale(0.9);
+        accent-color: #64d2ff;
+        cursor: pointer;
+      }
+    /* Row state fading */
+    tr.engaged {
+      opacity: 0.65;
+    }
+
+    tr.paid {
+      opacity: 0.35;
+    }
+
+    /* Keep hover readable */
+    tr.engaged:hover,
+    tr.paid:hover {
+      opacity: 1;
+    }
+
+    /* Prevent fade from affecting header */
+    thead tr {
+      opacity: 1 !important;
+    }
+    </style>
+  </head>
+  <body>
+    {% block content %}{% endblock %}
+    <script>
+      async function toggleStatus(weekId, playerId, field, checked) {
+        const form = new FormData();
+        form.append("week_id", weekId);
+        form.append("player_id", playerId);
+        form.append("field", field);
+        form.append("value", checked ? "true" : "false");
+
+        await fetch("/status/toggle", { method: "POST", body: form });
+      }
+    </script>
+  </body>
+</html>
