@@ -1,0 +1,95 @@
+{# app/templates/agents.html #}
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+
+  <div class="tabs">
+    <a class="tab" href="/">Live</a>
+    <a class="tab" href="/close">Week Close</a>
+    <a class="tab active" href="/agents">Agents</a>
+    <div class="tab-meta">Manage players (names + active)</div>
+  </div>
+
+  <div class="title">
+    <div>
+      <h1>Agents & Players</h1>
+      <div class="sub">Edit display names / activate-deactivate players (writes directly to DB)</div>
+    </div>
+  </div>
+
+  {% for agent_name, a in agents.items() %}
+    <div class="card" style="margin-bottom: 12px;">
+      <h3>{{ agent_name }}</h3>
+
+      <div class="table-wrap">
+        <table class="table main-table">
+          <thead>
+            <tr>
+              <th style="width: 28%;">Player ID</th>
+              <th style="width: 52%;">Display name</th>
+              <th class="center tiny" style="width: 10%;">Active</th>
+              <th class="right" style="width: 10%;">Save</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in a.players %}
+            <tr>
+              <td><b>{{ p.player_id }}</b></td>
+
+              <td>
+                <input
+                  id="dn-{{ p.player_id }}"
+                  value="{{ p.display_name or '' }}"
+                  style="width:100%; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #eaf0ff; padding: 10px 12px; border-radius: 10px; font-size: 14px; outline: none;"
+                />
+              </td>
+
+              <td class="center tiny">
+                <input
+                  id="ac-{{ p.player_id }}"
+                  type="checkbox"
+                  {% if p.active %}checked{% endif %}
+                />
+              </td>
+
+              <td class="right">
+                <button
+                  onclick="return savePlayer('{{ p.player_id }}')"
+                  style="padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.06); color:#eaf0ff; cursor:pointer;"
+                >
+                  Save
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footer-note muted" id="msg-{{ agent_name|replace(' ','_') }}"></div>
+    </div>
+  {% endfor %}
+
+</div>
+
+<script>
+async function savePlayer(playerId) {
+  const dn = document.getElementById(`dn-${playerId}`).value || '';
+  const ac = document.getElementById(`ac-${playerId}`).checked;
+
+  const fd = new FormData();
+  fd.append('player_id', playerId);
+  fd.append('display_name', dn);
+  fd.append('active', ac ? 'true' : 'false');
+
+  const res = await fetch('/players/update', { method: 'POST', body: fd });
+  const data = await res.json();
+
+  if (!data.ok) {
+    alert(data.error || 'Save failed');
+    return false;
+  }
+  return false;
+}
+</script>
+{% endblock %}

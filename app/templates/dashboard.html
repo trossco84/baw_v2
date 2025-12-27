@@ -1,15 +1,67 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="wrap">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <a class="tab {{ 'active' if mode=='live' else '' }}" href="/">Live</a>
+    <a class="tab {{ 'active' if mode=='close' else '' }}" href="/close?week_id={{ week_id }}">Week Close</a>
+    <div class="tab-meta">Week: {{ week_id }}</div>
+  </div>
+
+  {% if mode == 'live' %}
+    <meta http-equiv="refresh" content="3600">
+  {% endif %}
+
+  <!-- Title -->
   <div class="title">
     <div>
-      <h1>BAW Weekly Close</h1>
-      <div class="sub">Equal split summary + per-player payouts</div>
+      {% if mode == 'live' %}
+        <h1>BAW Live View</h1>
+        <div class="sub">Active week snapshot · no settlement</div>
+      {% else %}
+        <h1>BAW Weekly Close</h1>
+        <div class="sub">Equal split summary + per-player payouts</div>
+      {% endif %}
     </div>
+
     <div class="pill">
-    Book total: <b>{{ "{:,.2f}".format(book_total) }}</b> · Final balance: <b>{{ "{:,.2f}".format(final_balance) }}</b>
+      Book total: <b>{{ "{:,.2f}".format(book_total) }}</b>
+      · Final balance: <b>{{ "{:,.2f}".format(final_balance) }}</b>
     </div>
   </div>
+
+  <!-- Bet Slips (Week Close ONLY) -->
+  {% if mode == 'close' %}
+  <div class="betslips-card">
+    <div class="betslips-header">
+      <div>
+        <div class="betslips-title">Bet Slips</div>
+        <div class="betslips-sub">Week: {{ week_id }}</div>
+      </div>
+    </div>
+
+    <div class="betslips-columns">
+      <div class="betslips-col">
+        <div class="betslips-col-title">Past week</div>
+        <ul id="betslips-past"></ul>
+        <form class="betslip-form" onsubmit="return addSlip('past')">
+          <input id="betslip-past-input" placeholder="Add note..." />
+          <button type="submit">Add</button>
+        </form>
+      </div>
+
+      <div class="betslips-col">
+        <div class="betslips-col-title">Upcoming week</div>
+        <ul id="betslips-upcoming"></ul>
+        <form class="betslip-form" onsubmit="return addSlip('upcoming')">
+          <input id="betslip-upcoming-input" placeholder="Add note..." />
+          <button type="submit">Add</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Summary cards -->
   <div class="grid">
@@ -19,61 +71,62 @@
         <h3>{{ agent_name }}</h3>
 
         <div class="metric">
-        <div class="k">Players</div>
-        <div class="v">{{ a.num_players }}</div>
+          <div class="k">Players</div>
+          <div class="v">{{ a.num_players }}</div>
         </div>
 
         <div class="metric">
-        <div class="k">Net</div>
-        <div class="v {% if a.net >= 0 %}pos{% else %}neg{% endif %}">
+          <div class="k">Net</div>
+          <div class="v {% if a.net >= 0 %}pos{% else %}neg{% endif %}">
             {{ "{:,.2f}".format(a.net) }}
-        </div>
+          </div>
         </div>
 
         <div class="metric">
-        <div class="k">Final balance</div>
-        <div class="v">{{ "{:,.2f}".format(a.final_balance) }}</div>
+          <div class="k">Final balance</div>
+          <div class="v">{{ "{:,.2f}".format(a.final_balance) }}</div>
         </div>
-        
       </div>
     {% endfor %}
   </div>
 
-<div class="card" style="margin-top: 12px;">
-  <h3>Settlement Transfers</h3>
+  <!-- Settlement (Week Close ONLY) -->
+  {% if mode == 'close' %}
+  <div class="card" style="margin-top:12px;">
+    <h3>Settlement Transfers</h3>
 
-  {% if transfers and transfers|length > 0 %}
-    <table class="table" style="margin-top: 8px;">
-      <thead>
-        <tr>
-          <th>From</th>
-          <th>To</th>
-          <th class="right">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in transfers %}
+    {% if transfers and transfers|length > 0 %}
+      <table class="table">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>To</th>
+            <th class="right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transfers %}
           <tr>
             <td><b>{{ t.from }}</b></td>
             <td><b>{{ t.to }}</b></td>
             <td class="right">{{ "{:,.2f}".format(t.amount) }}</td>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <div class="footer-note">
-      This is the simplest way to equalize everyone’s take for the week.
-    </div>
-  {% else %}
-    <div class="muted">No transfers needed — everyone is even.</div>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="muted">No transfers needed — everyone is even.</div>
+    {% endif %}
+  </div>
   {% endif %}
-</div>
 
-  <!-- Controls -->
+  <!-- Agent selector -->
   <div class="controls">
-    <div class="pill">View details for one agent.</div>
-    <form method="get">
+    <div class="pill">View details for one agent</div>
+    <form method="get" action="{{ '/close' if mode=='close' else '/' }}">
+      {% if mode == 'close' %}
+        <input type="hidden" name="week_id" value="{{ week_id }}">
+      {% endif %}
       <select name="agent" onchange="this.form.submit()">
         {% for name in agent_names %}
           <option value="{{ name }}" {% if name == selected_agent %}selected{% endif %}>{{ name }}</option>
@@ -86,51 +139,54 @@
   {% if selected_agent %}
     {% set a = agents[selected_agent] %}
     <div class="card" style="padding:0;">
-      <table class="table">
-        <thead>
-        <tr>
-            <th style="width: 46%;">Player</th>
-            <th style="width: 14%;">Action</th>
-            <th class="right" style="width: 28%;">Amount</th>
-            <th class="center tiny">Engaged</th>
-            <th class="center tiny">Paid</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for p in a.players %}
-            <tr class="{% if p.paid %}paid{% elif p.engaged %}engaged{% endif %}">
-            <td>
+      <div class="table-wrap">
+        <table class="table main-table">
+          <thead>
+            <tr>
+              <th style="width:46%;">Player</th>
+              <th style="width:14%;">Action</th>
+              <th class="right" style="width:28%;">Amount</th>
+              {% if mode == 'close' %}
+                <th class="center tiny">Engaged</th>
+                <th class="center tiny">Paid</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in a.players %}
+            <tr class="{% if mode=='close' and p.paid %}paid{% elif mode=='close' and p.engaged %}engaged{% endif %}">
+              <td>
                 <b>{{ p.display_name }}</b>
                 <div class="muted" style="font-size:12px;">{{ p.player_id }}</div>
-            </td>
+              </td>
 
-            <td>
+              <td>
                 {% if p.action == "Pay" %}
-                <span class="action-pay">Pay</span>
+                  <span class="action-pay">Pay</span>
                 {% else %}
-                <span class="action-req">Request</span>
+                  <span class="action-req">Request</span>
                 {% endif %}
-            </td>
+              </td>
 
-            <td class="right">
-                {{ "{:,.2f}".format(p.abs_amount) }}
-            </td>
+              <td class="right">{{ "{:,.2f}".format(p.abs_amount) }}</td>
 
-            <td class="center tiny">
+              {% if mode == 'close' %}
+              <td class="center tiny">
                 <input type="checkbox"
-                    {% if p.engaged %}checked{% endif %}
-                    onchange="toggleStatus('{{ p.week_id }}','{{ p.player_id }}','engaged', this.checked)">
-            </td>
-
-            <td class="center tiny">
+                  {% if p.engaged %}checked{% endif %}
+                  onchange="toggleStatus('{{ p.week_id }}','{{ p.player_id }}','engaged', this.checked)">
+              </td>
+              <td class="center tiny">
                 <input type="checkbox"
-                    {% if p.paid %}checked{% endif %}
-                    onchange="toggleStatus('{{ p.week_id }}','{{ p.player_id }}','paid', this.checked)">
-            </td>
+                  {% if p.paid %}checked{% endif %}
+                  onchange="toggleStatus('{{ p.week_id }}','{{ p.player_id }}','paid', this.checked)">
+              </td>
+              {% endif %}
             </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="footer-note">
@@ -138,4 +194,47 @@
     </div>
   {% endif %}
 </div>
+
+{% if mode == 'close' %}
+<script>
+async function loadSlips() {
+  const res = await fetch('/betslips?week_id={{ week_id }}');
+  const data = await res.json();
+  const past = document.getElementById('betslips-past');
+  const up = document.getElementById('betslips-upcoming');
+  if (!past || !up) return;
+  past.innerHTML = '';
+  up.innerHTML = '';
+  (data.slips || []).forEach(s => {
+    const li = document.createElement('li');
+    li.textContent = s.note;
+    if (s.direction === 'past') past.appendChild(li);
+    else up.appendChild(li);
+  });
+}
+
+async function addSlip(direction) {
+  const input = document.getElementById(
+    direction === 'past' ? 'betslip-past-input' : 'betslip-upcoming-input'
+  );
+  const note = (input.value || '').trim();
+  if (!note) return false;
+
+  const fd = new FormData();
+  fd.append('week_id', '{{ week_id }}');
+  fd.append('direction', direction);
+  fd.append('note', note);
+
+  const res = await fetch('/betslips/add', { method: 'POST', body: fd });
+  const data = await res.json();
+  if (data.ok) {
+    input.value = '';
+    loadSlips();
+  }
+  return false;
+}
+
+loadSlips();
+</script>
+{% endif %}
 {% endblock %}

@@ -115,28 +115,42 @@ def scrape_week_last_week() -> Tuple[dt.date, List[ScrapedRow]]:
 
         # Wait for table to render
         # There are usually 2 tables (summary + detail). We'll scrape the detail table that has "Customer" header.
+        # Wait for any table header to appear after clicking Last Week
         try:
-            page.get_by_text("Customer", exact=True).wait_for(timeout=15000)
+            page.wait_for_selector("table thead tr th", timeout=45000)
         except PWTimeoutError:
-            raise RuntimeError("Weekly figures table not found after selecting Last Week")
+            page.screenshot(path="debug_no_table_headers.png", full_page=True)
+            raise RuntimeError("No table headers found after selecting Last Week. Screenshot: debug_no_table_headers.png")
+
+        # Sometimes the page has multiple tables; wait until at least one has multiple header cells
+        page.wait_for_timeout(500)  # small buffer for JS repaint
+
 
         # Find the table that contains the header "Customer"
         tables = page.locator("table")
         target_table = None
+        target_headers = None
+
         for i in range(tables.count()):
             t = tables.nth(i)
-            txt = t.inner_text()
-            if "Customer" in txt and "Week" in txt:
-                target_table = t
-                break
-        if target_table is None:
-            raise RuntimeError("Could not identify target table containing Customer/Week")
+            ths = t.locator("thead tr th")
+            if ths.count() < 5:
+                continue
 
-        # Header texts (for week_id inference)
-        header_cells = target_table.locator("thead tr").first.locator("th")
-        header_texts = []
-        for i in range(header_cells.count()):
-            header_texts.append(header_cells.nth(i).inner_text().strip())
+            headers = [ths.nth(j).inner_text().strip() for j in range(ths.count())]
+            norm = [h.lower() for h in headers]
+
+            # Look for the column names we need (Customer + Week)
+            if "customer" in norm and "week" in norm:
+                target_table = t
+                target_headers = headers
+                break
+
+        if target_table is None:
+            page.screenshot(path="debug_tables_found.png", full_page=True)
+            raise RuntimeError("Could not find a table with headers including Customer + Week. Screenshot: debug_tables_found.png")
+
+        header_texts = target_headers
 
         week_id = _infer_week_id_from_headers(header_texts)
 
