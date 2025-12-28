@@ -29,7 +29,7 @@ def compute_dashboard(rows):
     agent_count = max(len(agents), 1)
     final_balance = book_total / agent_count
 
-    # IMPORTANT: payer/receiver definition (fixes your inverted transfers)
+    # IMPORTANT: payer/receiver definition 
     # If net > final_balance => you pay (you made more than your share)
     # If net < final_balance => you receive
     for a in agents.values():

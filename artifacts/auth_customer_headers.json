@@ -1,0 +1,18 @@
+{
+  "Date": "Sun, 28 Dec 2025 02:27:52 GMT",
+  "Content-Type": "application/json; charset=utf-8",
+  "Transfer-Encoding": "chunked",
+  "Connection": "keep-alive",
+  "CF-RAY": "9b4d9efcee2ac47d-EWR",
+  "Vary": "Accept-Encoding",
+  "Set-Cookie": "PHPSESSID=k7pnkvc479gk714an9ojo00ckv; path=/, __cf_bm=RhOTRzGtH08RA8ltv7hnDXRk729fMdu91KvZjy0xTjY-1766888872-1.0.1.1-xPUTv.hnvgROMYDKAxp2iHKL4Ft2gmXECCkWV8qpqXbpwJuKR7JyZDrrH3qIEKtlBnoPNAV7YLnS.L.NObfSCU2iNR8g9QFqPithCbEy81A; path=/; expires=Sun, 28-Dec-25 02:57:52 GMT; domain=.nojuice.ag; HttpOnly; Secure; SameSite=None",
+  "Expires": "Thu, 19 Nov 1981 08:52:00 GMT",
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+  "Pragma": "no-cache",
+  "X-Frame-Options": "DENY",
+  "X-Server": "09",
+  "Content-Encoding": "gzip",
+  "Strict-Transport-Security": "max-age=16000000; includeSubDomains; preload;",
+  "cf-cache-status": "DYNAMIC",
+  "Server": "cloudflare"
+}

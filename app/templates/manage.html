@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="wrap">
+  <div class="title">
+    <h1>Manage Players & Agents</h1>
+    <span class="sub"><a href="/" style="color:var(--blue)">← Back to Dashboard</a></span>
+  </div>
+
+  <!-- Agents Section -->
+  <div class="card" style="margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 style="margin: 0;">Agents</h3>
+      <button onclick="showAddAgentForm()" style="
+        padding: 8px 14px;
+        background: var(--blue);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      ">+ Add Agent</button>
+    </div>
+
+    <div id="addAgentForm" style="display: none; margin-bottom: 20px; padding: 16px; background: rgba(0,0,0,.2); border-radius: 10px;">
+      <form id="agentForm">
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px;">Agent Name</label>
+          <input
+            type="text"
+            id="agentName"
+            required
+            style="
+              width: 100%;
+              padding: 10px;
+              background: rgba(255,255,255,.06);
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              color: var(--text);
+              font-size: 14px;
+            "
+          />
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="submit" style="
+            padding: 10px 16px;
+            background: var(--green);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+          ">Save Agent</button>
+          <button type="button" onclick="hideAddAgentForm()" style="
+            padding: 10px 16px;
+            background: rgba(255,255,255,.06);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+          ">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="agentsTable">
+        <tr>
+          <td colspan="3" class="center muted">Loading...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Players Section -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 style="margin: 0;">Players</h3>
+      <button onclick="showAddPlayerForm()" style="
+        padding: 8px 14px;
+        background: var(--blue);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      ">+ Add Player</button>
+    </div>
+
+    <div id="addPlayerForm" style="display: none; margin-bottom: 20px; padding: 16px; background: rgba(0,0,0,.2); border-radius: 10px;">
+      <form id="playerForm">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px;">Player ID (pyr###)</label>
+            <input
+              type="text"
+              id="playerId"
+              pattern="pyr\d+"
+              placeholder="pyr101"
+              required
+              style="
+                width: 100%;
+                padding: 10px;
+                background: rgba(255,255,255,.06);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                color: var(--text);
+                font-size: 14px;
+              "
+            />
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px;">Display Name</label>
+            <input
+              type="text"
+              id="displayName"
+              placeholder="John Doe"
+              style="
+                width: 100%;
+                padding: 10px;
+                background: rgba(255,255,255,.06);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                color: var(--text);
+                font-size: 14px;
+              "
+            />
+          </div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px;">Agent</label>
+          <select id="agentSelect" required style="
+            width: 100%;
+            padding: 10px;
+            background: rgba(255,255,255,.06);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+          ">
+            <option value="">Select Agent</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="submit" style="
+            padding: 10px 16px;
+            background: var(--green);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+          ">Save Player</button>
+          <button type="button" onclick="hideAddPlayerForm()" style="
+            padding: 10px 16px;
+            background: rgba(255,255,255,.06);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+          ">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Player ID</th>
+          <th>Display Name</th>
+          <th>Agent</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="playersTable">
+        <tr>
+          <td colspan="4" class="center muted">Loading...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let agents = [];
+  let players = [];
+
+  // Load data on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    loadAgents();
+    loadPlayers();
+  });
+
+  // ============================================================================
+  // AGENTS
+  // ============================================================================
+
+  async function loadAgents() {
+    try {
+      const response = await fetch('/agents');
+      agents = await response.json();
+      renderAgents();
+      updateAgentSelect();
+    } catch (error) {
+      console.error('Error loading agents:', error);
+      document.getElementById('agentsTable').innerHTML = '<tr><td colspan="3" class="center neg">Error loading agents</td></tr>';
+    }
+  }
+
+  function renderAgents() {
+    const tbody = document.getElementById('agentsTable');
+    if (agents.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="center muted">No agents found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = agents.map(agent => `
+      <tr>
+        <td>${agent.id}</td>
+        <td>${agent.name}</td>
+        <td class="right">
+          <button onclick="deleteAgent(${agent.id}, '${agent.name}')" style="
+            padding: 6px 12px;
+            background: rgba(255,69,58,.12);
+            color: var(--red);
+            border: 1px solid rgba(255,69,58,.25);
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+          ">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function updateAgentSelect() {
+    const select = document.getElementById('agentSelect');
+    select.innerHTML = '<option value="">Select Agent</option>' +
+      agents.map(agent => `<option value="${agent.id}">${agent.name}</option>`).join('');
+  }
+
+  function showAddAgentForm() {
+    document.getElementById('addAgentForm').style.display = 'block';
+    document.getElementById('agentName').focus();
+  }
+
+  function hideAddAgentForm() {
+    document.getElementById('addAgentForm').style.display = 'none';
+    document.getElementById('agentForm').reset();
+  }
+
+  document.getElementById('agentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const name = document.getElementById('agentName').value.trim();
+
+    try {
+      const response = await fetch('/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+
+      if (response.ok) {
+        hideAddAgentForm();
+        loadAgents();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      alert(`Network error: ${error.message}`);
+    }
+  });
+
+  async function deleteAgent(id, name) {
+    if (!confirm(`Delete agent "${name}"? This will fail if the agent has any players.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/agents/${id}`, { method: 'DELETE' });
+
+      if (response.ok) {
+        loadAgents();
+        loadPlayers();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      alert(`Network error: ${error.message}`);
+    }
+  }
+
+  // ============================================================================
+  // PLAYERS
+  // ============================================================================
+
+  async function loadPlayers() {
+    try {
+      const response = await fetch('/players');
+      players = await response.json();
+      renderPlayers();
+    } catch (error) {
+      console.error('Error loading players:', error);
+      document.getElementById('playersTable').innerHTML = '<tr><td colspan="4" class="center neg">Error loading players</td></tr>';
+    }
+  }
+
+  function renderPlayers() {
+    const tbody = document.getElementById('playersTable');
+    if (players.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="center muted">No players found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = players.map(player => `
+      <tr>
+        <td>${player.player_id}</td>
+        <td>${player.display_name || '<span class="muted">—</span>'}</td>
+        <td>${player.agent_name || '<span class="muted">Unassigned</span>'}</td>
+        <td class="right">
+          <button onclick="deletePlayer('${player.player_id}')" style="
+            padding: 6px 12px;
+            background: rgba(255,69,58,.12);
+            color: var(--red);
+            border: 1px solid rgba(255,69,58,.25);
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+          ">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function showAddPlayerForm() {
+    document.getElementById('addPlayerForm').style.display = 'block';
+    document.getElementById('playerId').focus();
+  }
+
+  function hideAddPlayerForm() {
+    document.getElementById('addPlayerForm').style.display = 'none';
+    document.getElementById('playerForm').reset();
+  }
+
+  document.getElementById('playerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const player_id = document.getElementById('playerId').value.trim().toLowerCase();
+    const display_name = document.getElementById('displayName').value.trim() || null;
+    const agent_id = parseInt(document.getElementById('agentSelect').value);
+
+    if (!agent_id) {
+      alert('Please select an agent');
+      return;
+    }
+
+    try {
+      const response = await fetch('/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id, display_name, agent_id })
+      });
+
+      if (response.ok) {
+        hideAddPlayerForm();
+        loadPlayers();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      alert(`Network error: ${error.message}`);
+    }
+  });
+
+  async function deletePlayer(playerId) {
+    if (!confirm(`Delete player "${playerId}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/players/${playerId}`, { method: 'DELETE' });
+
+      if (response.ok) {
+        loadPlayers();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      alert(`Network error: ${error.message}`);
+    }
+  }
+</script>
+{% endblock %}

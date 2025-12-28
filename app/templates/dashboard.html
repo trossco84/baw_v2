@@ -6,8 +6,12 @@
       <h1>BAW Weekly Close</h1>
       <div class="sub">Equal split summary + per-player payouts</div>
     </div>
-    <div class="pill">
-    Book total: <b>{{ "{:,.2f}".format(book_total) }}</b> · Final balance: <b>{{ "{:,.2f}".format(final_balance) }}</b>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <div class="pill">
+        Book total: <b>{{ "{:,.2f}".format(book_total) }}</b> · Final balance: <b>{{ "{:,.2f}".format(final_balance) }}</b>
+      </div>
+      <a href="/upload" style="color: var(--blue); text-decoration: none; font-size: 14px;">Upload</a>
+      <a href="/manage" style="color: var(--blue); text-decoration: none; font-size: 14px;">Manage</a>
     </div>
   </div>
 
@@ -63,12 +67,224 @@
     </table>
 
     <div class="footer-note">
-      This is the simplest way to equalize everyone’s take for the week.
+      This is the simplest way to equalize everyone's take for the week.
     </div>
   {% else %}
     <div class="muted">No transfers needed — everyone is even.</div>
   {% endif %}
 </div>
+
+<!-- Manual Betslips Section -->
+<div class="card" style="margin-top: 12px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h3 style="margin: 0;">Manual Betslips</h3>
+    {% if current_week %}
+      <button onclick="toggleBetslipForm()" id="addSlipBtn" style="
+        padding: 6px 12px;
+        background: var(--blue);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      ">+ Add Betslip</button>
+    {% endif %}
+  </div>
+
+  <!-- Add Betslip Form (Hidden by default) -->
+  <div id="betslipForm" style="display: none; margin-bottom: 16px; padding: 14px; background: rgba(0,0,0,.2); border-radius: 10px;">
+    <form id="slipForm" onsubmit="submitBetslip(event)">
+      <div style="display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 10px; margin-bottom: 10px;">
+        <div>
+          <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px;">Player</label>
+          <select id="slipPlayer" required style="
+            width: 100%;
+            padding: 8px;
+            background: rgba(255,255,255,.06);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 13px;
+          ">
+            <option value="">Select Player</option>
+            {% for player in all_players %}
+              <option value="{{ player.player_id }}">{{ player.player_id }} - {{ player.display_name or 'No Name' }} ({{ player.agent_name }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px;">Amount</label>
+          <input
+            type="number"
+            id="slipAmount"
+            step="0.01"
+            required
+            placeholder="50.00"
+            style="
+              width: 100%;
+              padding: 8px;
+              background: rgba(255,255,255,.06);
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              color: var(--text);
+              font-size: 13px;
+            "
+          />
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px;">Note (optional)</label>
+          <input
+            type="text"
+            id="slipNote"
+            placeholder="e.g., cash game"
+            style="
+              width: 100%;
+              padding: 8px;
+              background: rgba(255,255,255,.06);
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              color: var(--text);
+              font-size: 13px;
+            "
+          />
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="submit" style="
+          padding: 8px 14px;
+          background: var(--green);
+          color: #000;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+        ">Add Slip</button>
+        <button type="button" onclick="toggleBetslipForm()" style="
+          padding: 8px 14px;
+          background: rgba(255,255,255,.06);
+          color: var(--text);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          font-size: 13px;
+          cursor: pointer;
+        ">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Slips List -->
+  {% if slips and slips|length > 0 %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Agent</th>
+          <th class="right">Amount</th>
+          <th>Note</th>
+          <th class="right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for slip in slips %}
+          <tr>
+            <td>
+              <b>{{ slip.display_name or slip.player_id }}</b>
+              <div class="muted" style="font-size:11px;">{{ slip.player_id }}</div>
+            </td>
+            <td>{{ slip.agent_name or '—' }}</td>
+            <td class="right {% if slip.amount >= 0 %}pos{% else %}neg{% endif %}">
+              {{ "{:,.2f}".format(slip.amount) }}
+            </td>
+            <td class="muted">{{ slip.note or '—' }}</td>
+            <td class="right">
+              <button onclick="deleteSlip({{ slip.id }})" style="
+                padding: 4px 10px;
+                background: rgba(255,69,58,.12);
+                color: var(--red);
+                border: 1px solid rgba(255,69,58,.25);
+                border-radius: 6px;
+                font-size: 11px;
+                cursor: pointer;
+              ">Delete</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="footer-note">
+      Manual betslips are added to weekly amounts and update calculations in real-time.
+    </div>
+  {% else %}
+    <div class="muted">No manual betslips for this week.</div>
+  {% endif %}
+</div>
+
+<script>
+  function toggleBetslipForm() {
+    const form = document.getElementById('betslipForm');
+    const btn = document.getElementById('addSlipBtn');
+    if (form.style.display === 'none') {
+      form.style.display = 'block';
+      btn.textContent = '✕ Cancel';
+      document.getElementById('slipPlayer').focus();
+    } else {
+      form.style.display = 'none';
+      btn.textContent = '+ Add Betslip';
+      document.getElementById('slipForm').reset();
+    }
+  }
+
+  async function submitBetslip(event) {
+    event.preventDefault();
+
+    const playerId = document.getElementById('slipPlayer').value;
+    const amount = parseFloat(document.getElementById('slipAmount').value);
+    const note = document.getElementById('slipNote').value || null;
+
+    try {
+      const response = await fetch('/slips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          week_id: '{{ current_week }}',
+          player_id: playerId,
+          amount: amount,
+          note: note
+        })
+      });
+
+      if (response.ok) {
+        // Reload page to show updated calculations
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      alert(`Network error: ${error.message}`);
+    }
+  }
+
+  async function deleteSlip(slipId) {
+    if (!confirm('Delete this betslip?')) return;
+
+    try {
+      const response = await fetch(`/slips/${slipId}`, { method: 'DELETE' });
+
+      if (response.ok) {
+        // Reload page to show updated calculations
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail}`);
+      }
+    } catch (error) {
+      alert(`Network error: ${error.message}`);
+    }
+  }
+</script>
 
   <!-- Controls -->
   <div class="controls">

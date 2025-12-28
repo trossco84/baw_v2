@@ -31,3 +31,12 @@ create table if not exists manual_slips (
     note text,
     created_at timestamp default now()
 );
+
+create table if not exists weekly_player_status (
+    week_id date references weeks(week_id),
+    player_id text references players(player_id),
+    engaged boolean default false,
+    paid boolean default false,
+    updated_at timestamp default now(),
+    primary key (week_id, player_id)
+);
