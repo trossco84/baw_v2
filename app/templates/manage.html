@@ -99,7 +99,9 @@
     </div>
 
     <div id="addPlayerForm" style="display: none; margin-bottom: 20px; padding: 16px; background: rgba(0,0,0,.2); border-radius: 10px;">
+      <h4 id="playerFormTitle" style="margin: 0 0 12px 0; color: var(--text); font-size: 14px;">Add New Player</h4>
       <form id="playerForm">
+        <input type="hidden" id="editingPlayerId" value="">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
             <label style="display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px;">Player ID (pyr###)</label>
@@ -153,7 +155,7 @@
           </select>
         </div>
         <div style="display: flex; gap: 10px;">
-          <button type="submit" style="
+          <button type="submit" id="playerFormSubmit" style="
             padding: 10px 16px;
             background: var(--green);
             color: #000;
@@ -163,7 +165,7 @@
             font-weight: 600;
             cursor: pointer;
           ">Save Player</button>
-          <button type="button" onclick="hideAddPlayerForm()" style="
+          <button type="button" onclick="hidePlayerForm()" style="
             padding: 10px 16px;
             background: rgba(255,255,255,.06);
             color: var(--text);
@@ -334,6 +336,16 @@
         <td>${player.display_name || '<span class="muted">—</span>'}</td>
         <td>${player.agent_name || '<span class="muted">Unassigned</span>'}</td>
         <td class="right">
+          <button onclick='editPlayer(${JSON.stringify(player)})' style="
+            padding: 6px 12px;
+            background: rgba(100,210,255,.12);
+            color: var(--blue);
+            border: 1px solid rgba(100,210,255,.25);
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-right: 6px;
+          ">Edit</button>
           <button onclick="deletePlayer('${player.player_id}')" style="
             padding: 6px 12px;
             background: rgba(255,69,58,.12);
@@ -349,18 +361,35 @@
   }
 
   function showAddPlayerForm() {
+    document.getElementById('editingPlayerId').value = '';
+    document.getElementById('playerFormTitle').textContent = 'Add New Player';
+    document.getElementById('playerId').disabled = false;
     document.getElementById('addPlayerForm').style.display = 'block';
+    document.getElementById('playerForm').reset();
     document.getElementById('playerId').focus();
   }
 
-  function hideAddPlayerForm() {
+  function hidePlayerForm() {
     document.getElementById('addPlayerForm').style.display = 'none';
     document.getElementById('playerForm').reset();
+    document.getElementById('editingPlayerId').value = '';
+  }
+
+  function editPlayer(player) {
+    document.getElementById('editingPlayerId').value = player.player_id;
+    document.getElementById('playerFormTitle').textContent = 'Edit Player';
+    document.getElementById('playerId').value = player.player_id;
+    document.getElementById('playerId').disabled = true; // Can't change player_id when editing
+    document.getElementById('displayName').value = player.display_name || '';
+    document.getElementById('agentSelect').value = player.agent_id;
+    document.getElementById('addPlayerForm').style.display = 'block';
+    document.getElementById('displayName').focus();
   }
 
   document.getElementById('playerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    const editingPlayerId = document.getElementById('editingPlayerId').value;
     const player_id = document.getElementById('playerId').value.trim().toLowerCase();
     const display_name = document.getElementById('displayName').value.trim() || null;
     const agent_id = parseInt(document.getElementById('agentSelect').value);
@@ -371,14 +400,26 @@
     }
 
     try {
-      const response = await fetch('/players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_id, display_name, agent_id })
-      });
+      let response;
+
+      if (editingPlayerId) {
+        // Update existing player
+        response = await fetch(`/players/${editingPlayerId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ display_name, agent_id })
+        });
+      } else {
+        // Create new player
+        response = await fetch('/players', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id, display_name, agent_id })
+        });
+      }
 
       if (response.ok) {
-        hideAddPlayerForm();
+        hidePlayerForm();
         loadPlayers();
       } else {
         const error = await response.json();

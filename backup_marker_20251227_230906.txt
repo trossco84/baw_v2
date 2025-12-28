@@ -1,0 +1,7 @@
+Backup marker created at 2025-12-27 23:09:06.595936
+DATABASE_URL: postgresql://postgres.oqgyqhrk...
+
+NOTE: To create a proper backup, use:
+  pg_dump $DATABASE_URL > backup_20251227_230906.sql
+
+Or use Supabase dashboard to create a backup.

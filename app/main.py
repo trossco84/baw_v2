@@ -31,60 +31,68 @@ def dashboard(request: Request, agent: str | None = Query(default=None), user=De
     week_result = cur.fetchone()
     current_week = week_result[0] if week_result else None
 
-    # Aggregate weekly_raw + manual_slips to compute final week_amount
+    # Aggregate weekly_raw + manual_slips for CURRENT WEEK ONLY
+    # Updated for v2 schema: use player_instances instead of players
+    # Filter out Dro from calculations (only show Gabe, Trev, Orso)
     cur.execute("""
             select
             w.week_id,
-            p.player_id,
-            p.display_name,
+            pi.player_id,
+            pi.display_name,
             a.name as agent,
             coalesce(wr.week_amount, 0) + coalesce(slips.total_adjustment, 0) as week_amount,
             coalesce(s.engaged, false) as engaged,
             coalesce(s.paid, false) as paid
             from weekly_raw wr
-            join players p on p.player_id = wr.player_id
-            join agents a on a.id = p.agent_id
+            join player_instances pi on pi.id = wr.player_instance_id
+            join agents a on a.id = pi.agent_id
             join weeks w on w.week_id = wr.week_id
             left join weekly_player_status s
-                on s.week_id = wr.week_id and s.player_id = wr.player_id
+                on s.week_id = wr.week_id and s.player_instance_id = wr.player_instance_id
             left join (
-                select week_id, player_id, sum(amount) as total_adjustment
+                select week_id, player_instance_id, sum(amount) as total_adjustment
                 from manual_slips
-                group by week_id, player_id
-            ) slips on slips.week_id = wr.week_id and slips.player_id = wr.player_id
-            order by agent, p.player_id
-    """)
+                group by week_id, player_instance_id
+            ) slips on slips.week_id = wr.week_id and slips.player_instance_id = wr.player_instance_id
+            where w.week_id = %s
+              and a.name != 'Dro'
+            order by a.name, pi.player_id
+    """, (current_week,) if current_week else (None,))
     cols = [c[0] for c in cur.description]
     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
 
     # Also fetch manual slips for display
+    # Updated for v2 schema: use player_instances
     slips = []
     if current_week:
         cur.execute("""
-            SELECT m.id, m.week_id, m.player_id, m.amount, m.note, m.created_at,
-                   p.display_name, a.name as agent_name
+            SELECT m.id, m.week_id, m.player_instance_id, pi.player_id, m.amount, m.note, m.created_at,
+                   pi.display_name, a.name as agent_name
             FROM manual_slips m
-            LEFT JOIN players p ON p.player_id = m.player_id
-            LEFT JOIN agents a ON a.id = p.agent_id
+            LEFT JOIN player_instances pi ON pi.id = m.player_instance_id
+            LEFT JOIN agents a ON a.id = pi.agent_id
             WHERE m.week_id = %s
             ORDER BY m.created_at DESC
         """, (current_week,))
         slip_cols = [c[0] for c in cur.description]
         slips = [dict(zip(slip_cols, r)) for r in cur.fetchall()]
 
-    # Get all players for betslip form
+    # Get all current players for betslip form
+    # Updated for v2 schema: only show current players
     cur.execute("""
-        SELECT p.player_id, p.display_name, a.name as agent_name
-        FROM players p
-        LEFT JOIN agents a ON a.id = p.agent_id
-        ORDER BY a.name, p.player_id
+        SELECT pi.player_id, pi.display_name, a.name as agent_name
+        FROM player_instances pi
+        LEFT JOIN agents a ON a.id = pi.agent_id
+        WHERE pi.is_current = true
+        ORDER BY a.name, pi.player_id
     """)
     player_cols = [c[0] for c in cur.description]
     all_players = [dict(zip(player_cols, r)) for r in cur.fetchall()]
 
-    conn.close()
+    # Compute dashboard with connection (for Kevin bubble logic)
+    agents, book_total, final_balance, transfers, split_info = compute_dashboard(rows, conn)
 
-    agents, book_total, final_balance, transfers = compute_dashboard(rows)
+    conn.close()
 
     agent_names = sorted(list(agents.keys()))
     selected_agent = agent if agent in agents else (agent_names[0] if agent_names else None)
@@ -102,6 +110,7 @@ def dashboard(request: Request, agent: str | None = Query(default=None), user=De
             "slips": slips,
             "current_week": current_week,
             "all_players": all_players,
+            "split_info": split_info,
         },
     )
 
@@ -121,17 +130,29 @@ def toggle_status(
     conn = get_db()
     cur = conn.cursor()
 
+    # v2 schema: Get player_instance_id for current player
     cur.execute("""
-      insert into weekly_player_status (week_id, player_id, engaged, paid)
+        SELECT id FROM player_instances
+        WHERE player_id = %s AND is_current = true
+    """, (player_id,))
+    result = cur.fetchone()
+    if not result:
+        conn.close()
+        return {"ok": False, "error": f"Player {player_id} not found"}
+
+    player_instance_id = result[0]
+
+    cur.execute("""
+      insert into weekly_player_status (week_id, player_instance_id, engaged, paid)
       values (%s, %s, false, false)
-      on conflict (week_id, player_id) do nothing
-    """, (week_id, player_id))
+      on conflict (week_id, player_instance_id) do nothing
+    """, (week_id, player_instance_id))
 
     cur.execute(f"""
       update weekly_player_status
       set {field} = %s, updated_at = now()
-      where week_id = %s and player_id = %s
-    """, (val, week_id, player_id))
+      where week_id = %s and player_instance_id = %s
+    """, (val, week_id, player_instance_id))
 
     conn.commit()
     conn.close()
@@ -198,17 +219,48 @@ async def upload_weekly_excel(
         )
 
         # Upsert weekly_raw data
+        # v2 schema: Use get_or_create_player_instance function
+        # Note: Excel upload needs agent_id - assuming it's in the dataframe or needs to be looked up
         players_imported = 0
         for _, row in df.iterrows():
+            player_id = row['player_id']
+
+            # TODO: Get display_name and agent_id from player lookup or Excel
+            # For now, get from existing player_instances or use defaults
             cur.execute("""
-                INSERT INTO weekly_raw (week_id, player_id, week_amount, pending, scraped_at)
+                SELECT id, display_name, agent_id
+                FROM player_instances
+                WHERE player_id = %s AND is_current = true
+                LIMIT 1
+            """, (player_id,))
+
+            existing = cur.fetchone()
+            if existing:
+                player_instance_id = existing[0]
+                display_name = existing[1]
+                agent_id = existing[2]
+            else:
+                # Player doesn't exist - need to create instance
+                # For now, use a default agent (Agent ID 1) and player_id as display_name
+                # This should be improved to parse agent from Excel or use proper lookup
+                display_name = player_id
+                agent_id = 1  # Default agent - should be determined from Excel data
+
+                cur.execute("""
+                    SELECT get_or_create_player_instance(%s, %s, %s, %s)
+                """, (player_id, display_name, agent_id, week_id))
+                player_instance_id = cur.fetchone()[0]
+
+            # Insert weekly_raw data with player_instance_id
+            cur.execute("""
+                INSERT INTO weekly_raw (week_id, player_instance_id, week_amount, pending, scraped_at)
                 VALUES (%s, %s, %s, %s, now())
-                ON CONFLICT (week_id, player_id)
+                ON CONFLICT (week_id, player_instance_id)
                 DO UPDATE SET
                     week_amount = EXCLUDED.week_amount,
                     pending = EXCLUDED.pending,
                     scraped_at = now()
-            """, (row['week_id'], row['player_id'], row['week_amount'], row['pending']))
+            """, (row['week_id'], player_instance_id, row['week_amount'], row['pending']))
             players_imported += 1
 
         conn.commit()
@@ -236,15 +288,16 @@ async def upload_weekly_excel(
 
 @app.get("/players")
 def list_players(user=Depends(basic_auth)):
-    """List all players"""
+    """List all current players (v2 schema: only is_current=true)"""
     conn = get_db()
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT p.id, p.player_id, p.display_name, p.agent_id, a.name as agent_name
-        FROM players p
-        LEFT JOIN agents a ON a.id = p.agent_id
-        ORDER BY p.player_id
+        SELECT pi.id, pi.player_id, pi.display_name, pi.agent_id, a.name as agent_name
+        FROM player_instances pi
+        LEFT JOIN agents a ON a.id = pi.agent_id
+        WHERE pi.is_current = true
+        ORDER BY pi.player_id
     """)
 
     cols = [c[0] for c in cur.description]
@@ -256,16 +309,25 @@ def list_players(user=Depends(basic_auth)):
 
 @app.post("/players", response_model=Player)
 def create_player(player: PlayerCreate, user=Depends(basic_auth)):
-    """Create a new player"""
+    """Create a new player (v2 schema: creates player_instance)"""
     conn = get_db()
     cur = conn.cursor()
 
     try:
+        # Use get_or_create_player_instance function
+        from datetime import date
         cur.execute("""
-            INSERT INTO players (player_id, display_name, agent_id)
-            VALUES (%s, %s, %s)
-            RETURNING id, player_id, display_name, agent_id
-        """, (player.player_id, player.display_name, player.agent_id))
+            SELECT get_or_create_player_instance(%s, %s, %s, %s)
+        """, (player.player_id, player.display_name, player.agent_id, date.today()))
+
+        player_instance_id = cur.fetchone()[0]
+
+        # Fetch the created instance
+        cur.execute("""
+            SELECT id, player_id, display_name, agent_id
+            FROM player_instances
+            WHERE id = %s
+        """, (player_instance_id,))
 
         result = cur.fetchone()
         conn.commit()
@@ -277,9 +339,6 @@ def create_player(player: PlayerCreate, user=Depends(basic_auth)):
             agent_id=result[3]
         )
 
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail=f"Player {player.player_id} already exists")
     except psycopg2.errors.ForeignKeyViolation:
         conn.rollback()
         raise HTTPException(status_code=400, detail=f"Agent ID {player.agent_id} does not exist")
@@ -289,7 +348,7 @@ def create_player(player: PlayerCreate, user=Depends(basic_auth)):
 
 @app.put("/players/{player_id}")
 def update_player(player_id: str, player: PlayerUpdate, user=Depends(basic_auth)):
-    """Update a player"""
+    """Update a player (v2 schema: updates current player_instance)"""
     conn = get_db()
     cur = conn.cursor()
 
@@ -297,9 +356,6 @@ def update_player(player_id: str, player: PlayerUpdate, user=Depends(basic_auth)
     updates = []
     params = []
 
-    if player.player_id is not None:
-        updates.append("player_id = %s")
-        params.append(player.player_id)
     if player.display_name is not None:
         updates.append("display_name = %s")
         params.append(player.display_name)
@@ -314,9 +370,9 @@ def update_player(player_id: str, player: PlayerUpdate, user=Depends(basic_auth)
 
     try:
         cur.execute(f"""
-            UPDATE players
+            UPDATE player_instances
             SET {', '.join(updates)}
-            WHERE player_id = %s
+            WHERE player_id = %s AND is_current = true
             RETURNING id, player_id, display_name, agent_id
         """, params)
 
@@ -333,9 +389,6 @@ def update_player(player_id: str, player: PlayerUpdate, user=Depends(basic_auth)
             agent_id=result[3]
         )
 
-    except psycopg2.errors.UniqueViolation:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail=f"Player ID {player.player_id} already exists")
     except psycopg2.errors.ForeignKeyViolation:
         conn.rollback()
         raise HTTPException(status_code=400, detail=f"Agent ID {player.agent_id} does not exist")
@@ -345,11 +398,17 @@ def update_player(player_id: str, player: PlayerUpdate, user=Depends(basic_auth)
 
 @app.delete("/players/{player_id}")
 def delete_player(player_id: str, user=Depends(basic_auth)):
-    """Delete a player"""
+    """Delete a player (v2 schema: marks current player_instance as not current)"""
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("DELETE FROM players WHERE player_id = %s", (player_id,))
+    # Mark as not current instead of deleting (preserves history)
+    from datetime import date
+    cur.execute("""
+        UPDATE player_instances
+        SET is_current = false, last_seen = %s
+        WHERE player_id = %s AND is_current = true
+    """, (date.today(), player_id))
 
     if cur.rowcount == 0:
         conn.close()
@@ -436,19 +495,22 @@ def update_agent(agent_id: int, agent: AgentUpdate, user=Depends(basic_auth)):
 
 @app.delete("/agents/{agent_id}")
 def delete_agent(agent_id: int, user=Depends(basic_auth)):
-    """Delete an agent"""
+    """Delete an agent (v2 schema: checks current player_instances)"""
     conn = get_db()
     cur = conn.cursor()
 
-    # Check if agent has players
-    cur.execute("SELECT COUNT(*) FROM players WHERE agent_id = %s", (agent_id,))
+    # Check if agent has current players
+    cur.execute("""
+        SELECT COUNT(*) FROM player_instances
+        WHERE agent_id = %s AND is_current = true
+    """, (agent_id,))
     player_count = cur.fetchone()[0]
 
     if player_count > 0:
         conn.close()
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot delete agent with {player_count} players. Reassign or delete players first."
+            detail=f"Cannot delete agent with {player_count} current players. Reassign or delete players first."
         )
 
     cur.execute("DELETE FROM agents WHERE id = %s", (agent_id,))
@@ -469,16 +531,16 @@ def delete_agent(agent_id: int, user=Depends(basic_auth)):
 
 @app.get("/slips/{week_id}")
 def list_slips(week_id: str, user=Depends(basic_auth)):
-    """List all manual slips for a week"""
+    """List all manual slips for a week (v2 schema: uses player_instances)"""
     conn = get_db()
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT m.id, m.week_id, m.player_id, m.amount, m.note, m.created_at,
-               p.display_name, a.name as agent_name
+        SELECT m.id, m.week_id, m.player_instance_id, pi.player_id, m.amount, m.note, m.created_at,
+               pi.display_name, a.name as agent_name
         FROM manual_slips m
-        LEFT JOIN players p ON p.player_id = m.player_id
-        LEFT JOIN agents a ON a.id = p.agent_id
+        LEFT JOIN player_instances pi ON pi.id = m.player_instance_id
+        LEFT JOIN agents a ON a.id = pi.agent_id
         WHERE m.week_id = %s
         ORDER BY m.created_at DESC
     """, (week_id,))
@@ -492,7 +554,7 @@ def list_slips(week_id: str, user=Depends(basic_auth)):
 
 @app.post("/slips", response_model=ManualSlip)
 def create_slip(slip: ManualSlipCreate, user=Depends(basic_auth)):
-    """Add a manual betslip"""
+    """Add a manual betslip (v2 schema: converts player_id to player_instance_id)"""
     conn = get_db()
     cur = conn.cursor()
 
@@ -503,11 +565,23 @@ def create_slip(slip: ManualSlipCreate, user=Depends(basic_auth)):
             (slip.week_id,)
         )
 
+        # Get player_instance_id for current player
         cur.execute("""
-            INSERT INTO manual_slips (week_id, player_id, amount, note, created_at)
+            SELECT id FROM player_instances
+            WHERE player_id = %s AND is_current = true
+        """, (slip.player_id,))
+
+        player_result = cur.fetchone()
+        if not player_result:
+            raise HTTPException(status_code=404, detail=f"Player {slip.player_id} not found")
+
+        player_instance_id = player_result[0]
+
+        cur.execute("""
+            INSERT INTO manual_slips (week_id, player_instance_id, amount, note, created_at)
             VALUES (%s, %s, %s, %s, now())
-            RETURNING id, week_id, player_id, amount, note, created_at
-        """, (slip.week_id, slip.player_id, slip.amount, slip.note))
+            RETURNING id, week_id, player_instance_id, amount, note, created_at
+        """, (slip.week_id, player_instance_id, slip.amount, slip.note))
 
         result = cur.fetchone()
         conn.commit()
@@ -515,7 +589,8 @@ def create_slip(slip: ManualSlipCreate, user=Depends(basic_auth)):
         return ManualSlip(
             id=result[0],
             week_id=result[1],
-            player_id=result[2],
+            player_instance_id=result[2],
+            player_id=slip.player_id,
             amount=result[3],
             note=result[4],
             created_at=result[5]
@@ -523,7 +598,7 @@ def create_slip(slip: ManualSlipCreate, user=Depends(basic_auth)):
 
     except psycopg2.errors.ForeignKeyViolation:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=f"Player {slip.player_id} or week {slip.week_id} does not exist")
+        raise HTTPException(status_code=400, detail=f"Week {slip.week_id} does not exist")
     finally:
         conn.close()
 

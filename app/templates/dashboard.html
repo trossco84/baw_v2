@@ -4,11 +4,11 @@
   <div class="title">
     <div>
       <h1>BAW Weekly Close</h1>
-      <div class="sub">Equal split summary + per-player payouts</div>
+      <div class="sub">Week of {{ current_week }} - Settlement Summary</div>
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <div class="pill">
-        Book total: <b>{{ "{:,.2f}".format(book_total) }}</b> · Final balance: <b>{{ "{:,.2f}".format(final_balance) }}</b>
+        Book total: <b>{{ "{:,.2f}".format(book_total) }}</b>
       </div>
       <a href="/upload" style="color: var(--blue); text-decoration: none; font-size: 14px;">Upload</a>
       <a href="/manage" style="color: var(--blue); text-decoration: none; font-size: 14px;">Manage</a>
@@ -35,16 +35,30 @@
         </div>
 
         <div class="metric">
+        <div class="k">Split</div>
+        <div class="v" style="color: var(--blue);">
+            {{ "{:.1f}%".format(a.split_percentage * 100) }}
+        </div>
+        </div>
+
+        <div class="metric">
         <div class="k">Final balance</div>
         <div class="v">{{ "{:,.2f}".format(a.final_balance) }}</div>
         </div>
-        
+
       </div>
     {% endfor %}
   </div>
 
 <div class="card" style="margin-top: 12px;">
   <h3>Settlement Transfers</h3>
+
+  {% if split_info and split_info.explanation %}
+  <div style="margin-bottom: 12px; padding: 10px; background: rgba(52, 199, 89, 0.08); border: 1px solid rgba(52, 199, 89, 0.2); border-radius: 8px;">
+    <div style="font-weight: 600; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">Split Calculation</div>
+    <div style="white-space: pre-line; line-height: 1.5; color: rgba(255,255,255,0.85); font-size: 12px;">{{ split_info.explanation }}</div>
+  </div>
+  {% endif %}
 
   {% if transfers and transfers|length > 0 %}
     <table class="table" style="margin-top: 8px;">
@@ -199,7 +213,7 @@
             </td>
             <td class="muted">{{ slip.note or '—' }}</td>
             <td class="right">
-              <button onclick="deleteSlip({{ slip.id }})" style="
+              <button data-slip-id="{{ slip.id }}" onclick="deleteSlip(this.dataset.slipId)" style="
                 padding: 4px 10px;
                 background: rgba(255,69,58,.12);
                 color: var(--red);
@@ -350,8 +364,18 @@
     </div>
 
     <div class="footer-note">
-      Tip: “Pay” means you pay the player. “Request” means the player owes you.
+      Tip: "Pay" means you pay the player. "Request" means the player owes you.
     </div>
   {% endif %}
+</div>
+
+<!-- Kevin Bubble Status (at bottom) -->
+{% if split_info and split_info.kevin_bubble %}
+<div class="card" style="margin-top: 12px; background: rgba(255, 159, 10, 0.08); border: 1px solid rgba(255, 159, 10, 0.2);">
+  <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">Kevin Bubble Status</div>
+  <div style="white-space: pre-line; line-height: 1.5; color: rgba(255,255,255,0.85); font-size: 12px;">{{ split_info.kevin_bubble }}</div>
+</div>
+{% endif %}
+
 </div>
 {% endblock %}
