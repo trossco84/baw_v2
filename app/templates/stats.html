@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="wrap">
+  <div class="title">
+    <div>
+      <h1>Agent Stats</h1>
+      <div class="sub">All-time performance metrics</div>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <a href="/" style="color: var(--blue); text-decoration: none; font-size: 14px;">Dashboard</a>
+      <a href="/upload" style="color: var(--blue); text-decoration: none; font-size: 14px;">Upload</a>
+      <a href="/manage" style="color: var(--blue); text-decoration: none; font-size: 14px;">Manage</a>
+    </div>
+  </div>
+
+  <!-- Agent selector buttons -->
+  <div style="margin-bottom: 24px;">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      {% for agent in agent_names %}
+        <a href="/stats?agent={{ agent }}"
+           class="agent-button {% if agent == selected_agent %}active{% endif %}"
+           style="text-decoration: none;">
+          {{ agent }}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if stats %}
+    <!-- Baseball Card Layout -->
+    <div class="baseball-card">
+      <!-- Top section: Key stats -->
+      <div class="card-header">
+        <div class="agent-name">{{ stats.name }}</div>
+      </div>
+
+      <div class="card-top">
+        <!-- Left: Placeholder for image/icon -->
+        <div class="agent-avatar">
+          <div class="avatar-placeholder">{{ stats.name[0] }}</div>
+        </div>
+
+        <!-- Right: Key characteristics -->
+        <div class="key-stats">
+          <div class="stat-row">
+            <div class="stat-label">Total Volume</div>
+            <div class="stat-value">${{ "{:,.2f}".format(stats.total_volume) }}</div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-value {% if stats.total_revenue >= 0 %}pos{% else %}neg{% endif %}">
+              ${{ "{:,.2f}".format(stats.total_revenue) }}
+            </div>
+          </div>
+          <div class="stat-row">
+            <div class="stat-label">Avg Weekly Players</div>
+            <div class="stat-value">{{ "{:.1f}".format(stats.avg_player_count) }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom section: 3 cards -->
+      <div class="card-bottom">
+        <!-- Top 5 Best Players -->
+        <div class="mini-card">
+          <div class="mini-card-title">Top 5 Loss Leaders</div>
+          {% if stats.top_players and stats.top_players|length > 0 %}
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th class="right">Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for player in stats.top_players %}
+                  <tr>
+                    <td>{{ player.name }}</td>
+                    <td class="right {% if player.revenue >= 0 %}pos{% else %}neg{% endif %}">
+                      ${{ "{:,.2f}".format(player.revenue) }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="muted" style="padding: 12px; text-align: center; font-size: 13px;">No data</div>
+          {% endif %}
+        </div>
+
+        <!-- Top 5 Worst Players -->
+        <div class="mini-card">
+          <div class="mini-card-title">Top 5 Biggest Losers</div>
+          {% if stats.worst_players and stats.worst_players|length > 0 %}
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th class="right">Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for player in stats.worst_players %}
+                  <tr>
+                    <td>{{ player.name }}</td>
+                    <td class="right {% if player.revenue >= 0 %}pos{% else %}neg{% endif %}">
+                      ${{ "{:,.2f}".format(player.revenue) }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="muted" style="padding: 12px; text-align: center; font-size: 13px;">No data</div>
+          {% endif %}
+        </div>
+
+        <!-- Best Week -->
+        <div class="mini-card">
+          <div class="mini-card-title">Best Week</div>
+          {% if stats.best_week %}
+            <div style="padding: 12px;">
+              <div class="best-week-stat">
+                <div class="bw-label">Week</div>
+                <div class="bw-value">{{ stats.best_week.week_id }}</div>
+              </div>
+              <div class="best-week-stat">
+                <div class="bw-label">Revenue</div>
+                <div class="bw-value {% if stats.best_week.revenue >= 0 %}pos{% else %}neg{% endif %}">
+                  ${{ "{:,.2f}".format(stats.best_week.revenue) }}
+                </div>
+              </div>
+              <div class="best-week-stat">
+                <div class="bw-label">Players</div>
+                <div class="bw-value">{{ stats.best_week.player_count }}</div>
+              </div>
+              <div class="best-week-stat" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+                <div class="bw-label">Top Contributor</div>
+                <div class="bw-value" style="font-size: 13px;">{{ stats.best_week.biggest_contributor }}</div>
+              </div>
+              <div class="best-week-stat">
+                <div class="bw-label">Contribution</div>
+                <div class="bw-value {% if stats.best_week.biggest_contribution >= 0 %}pos{% else %}neg{% endif %}">
+                  ${{ "{:,.2f}".format(stats.best_week.biggest_contribution) }}
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="muted" style="padding: 12px; text-align: center; font-size: 13px;">No data</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="muted">No agent selected or no data available.</div>
+    </div>
+  {% endif %}
+</div>
+
+<style>
+  /* Agent selector buttons */
+  .agent-button {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,.04);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .agent-button:hover {
+    background: rgba(255,255,255,.08);
+    border-color: var(--blue);
+  }
+
+  .agent-button.active {
+    background: rgba(100, 210, 255, 0.15);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+
+  /* Baseball card container */
+  .baseball-card {
+    background: linear-gradient(135deg, rgba(17,26,51,.95) 0%, rgba(17,26,51,.85) 100%);
+    border: 2px solid var(--border);
+    border-radius: 18px;
+    padding: 0;
+    box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    overflow: hidden;
+  }
+
+  .card-header {
+    background: linear-gradient(90deg, rgba(100, 210, 255, 0.15) 0%, rgba(100, 210, 255, 0.05) 100%);
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agent-name {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: 0.5px;
+  }
+
+  /* Top section (avatar + key stats) */
+  .card-top {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    padding: 24px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  @media (max-width: 768px) {
+    .card-top {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .agent-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .avatar-placeholder {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(100, 210, 255, 0.2) 0%, rgba(100, 210, 255, 0.05) 100%);
+    border: 3px solid var(--blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 72px;
+    font-weight: 700;
+    color: var(--blue);
+  }
+
+  .key-stats {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-row:last-child {
+    border-bottom: none;
+  }
+
+  .stat-label {
+    font-size: 14px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+
+  .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Bottom section (3 mini cards) */
+  .card-bottom {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+
+  @media (max-width: 900px) {
+    .card-bottom {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .mini-card {
+    background: rgba(17,26,51,.9);
+    padding: 16px;
+  }
+
+  .mini-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--blue);
+  }
+
+  .mini-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .mini-table th,
+  .mini-table td {
+    padding: 8px 4px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+    font-size: 13px;
+  }
+
+  .mini-table th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .mini-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .best-week-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+  }
+
+  .bw-label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .bw-value {
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+{% endblock %}

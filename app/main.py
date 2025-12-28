@@ -182,6 +182,168 @@ def manage_page(request: Request, user=Depends(basic_auth)):
     return templates.TemplateResponse("manage.html", {"request": request})
 
 
+@app.get("/stats", response_class=HTMLResponse)
+def stats_page(request: Request, agent: str | None = Query(default=None), user=Depends(basic_auth)):
+    """Render the agent statistics page (baseball card style)"""
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get all agents (excluding Dro)
+    cur.execute("""
+        SELECT DISTINCT a.name
+        FROM agents a
+        WHERE a.name != 'Dro'
+        ORDER BY a.name
+    """)
+    agent_names = [row[0] for row in cur.fetchall()]
+
+    # Default to first agent if none selected
+    selected_agent = agent if agent in agent_names else (agent_names[0] if agent_names else None)
+
+    agent_stats = None
+
+    if selected_agent:
+        # Get agent_id
+        cur.execute("SELECT id FROM agents WHERE name = %s", (selected_agent,))
+        agent_result = cur.fetchone()
+        if not agent_result:
+            conn.close()
+            raise HTTPException(status_code=404, detail=f"Agent {selected_agent} not found")
+
+        agent_id = agent_result[0]
+
+        # 1. Calculate aggregate stats: total volume, total revenue, avg weekly player count
+        cur.execute("""
+            SELECT
+                SUM(ABS(wr.week_amount)) as total_volume,
+                SUM(wr.week_amount) as total_revenue,
+                AVG(weekly_players.player_count) as avg_player_count
+            FROM weekly_raw wr
+            JOIN player_instances pi ON pi.id = wr.player_instance_id
+            LEFT JOIN (
+                SELECT week_id, COUNT(DISTINCT player_instance_id) as player_count
+                FROM weekly_raw wr2
+                JOIN player_instances pi2 ON pi2.id = wr2.player_instance_id
+                WHERE pi2.agent_id = %s
+                GROUP BY week_id
+            ) weekly_players ON weekly_players.week_id = wr.week_id
+            WHERE pi.agent_id = %s
+        """, (agent_id, agent_id))
+
+        stats_result = cur.fetchone()
+        total_volume = float(stats_result[0]) if stats_result[0] else 0.0
+        total_revenue = float(stats_result[1]) if stats_result[1] else 0.0
+        avg_player_count = float(stats_result[2]) if stats_result[2] else 0.0
+
+        # 2. Get top 5 best players (most revenue generated) all-time
+        cur.execute("""
+            SELECT
+                pi.display_name,
+                pi.player_id,
+                SUM(wr.week_amount) as total_revenue
+            FROM weekly_raw wr
+            JOIN player_instances pi ON pi.id = wr.player_instance_id
+            WHERE pi.agent_id = %s
+            GROUP BY pi.display_name, pi.player_id
+            ORDER BY total_revenue ASC
+            LIMIT 5
+        """, (agent_id,))
+        top_players = [
+            {"name": row[0], "player_id": row[1], "revenue": float(row[2])}
+            for row in cur.fetchall()
+        ]
+
+        # 3. Get top 5 worst players (most losses) all-time
+        cur.execute("""
+            SELECT
+                pi.display_name,
+                pi.player_id,
+                SUM(wr.week_amount) as total_revenue
+            FROM weekly_raw wr
+            JOIN player_instances pi ON pi.id = wr.player_instance_id
+            WHERE pi.agent_id = %s
+            GROUP BY pi.display_name, pi.player_id
+            ORDER BY total_revenue DESC
+            LIMIT 5
+        """, (agent_id,))
+        worst_players = [
+            {"name": row[0], "player_id": row[1], "revenue": float(row[2])}
+            for row in cur.fetchall()
+        ]
+
+        # 4. Get best week: most revenue (most negative = best), player count that week, biggest contributor
+        cur.execute("""
+            WITH weekly_stats AS (
+                SELECT
+                    wr.week_id,
+                    SUM(wr.week_amount) as week_revenue,
+                    COUNT(DISTINCT wr.player_instance_id) as player_count
+                FROM weekly_raw wr
+                JOIN player_instances pi ON pi.id = wr.player_instance_id
+                WHERE pi.agent_id = %s
+                GROUP BY wr.week_id
+            )
+            SELECT week_id, week_revenue, player_count
+            FROM weekly_stats
+            ORDER BY week_revenue DESC
+            LIMIT 1
+        """, (agent_id,))
+
+        best_week_result = cur.fetchone()
+        best_week = None
+
+        if best_week_result:
+            best_week_id = best_week_result[0]
+            best_week_revenue = float(best_week_result[1])
+            best_week_players = int(best_week_result[2])
+
+            # Get biggest contributor (biggest loser = most positive) for that week
+            cur.execute("""
+                SELECT
+                    pi.display_name,
+                    wr.week_amount
+                FROM weekly_raw wr
+                JOIN player_instances pi ON pi.id = wr.player_instance_id
+                WHERE pi.agent_id = %s AND wr.week_id = %s
+                ORDER BY wr.week_amount DESC
+                LIMIT 1
+            """, (agent_id, best_week_id))
+
+            contributor_result = cur.fetchone()
+            biggest_contributor_name = contributor_result[0] if contributor_result else "N/A"
+            biggest_contributor_amount = float(contributor_result[1]) if contributor_result else 0.0
+
+            best_week = {
+                "week_id": best_week_id,
+                "revenue": best_week_revenue,
+                "player_count": best_week_players,
+                "biggest_contributor": biggest_contributor_name,
+                "biggest_contribution": biggest_contributor_amount
+            }
+
+        agent_stats = {
+            "name": selected_agent,
+            "total_volume": total_volume,
+            "total_revenue": total_revenue,
+            "avg_player_count": avg_player_count,
+            "top_players": top_players,
+            "worst_players": worst_players,
+            "best_week": best_week
+        }
+
+    conn.close()
+
+    return templates.TemplateResponse(
+        "stats.html",
+        {
+            "request": request,
+            "agent_names": agent_names,
+            "selected_agent": selected_agent,
+            "stats": agent_stats,
+        },
+    )
+
+
 @app.post("/upload/weekly")
 async def upload_weekly_excel(
     file: UploadFile = File(...),

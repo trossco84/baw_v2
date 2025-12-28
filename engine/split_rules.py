@@ -103,7 +103,7 @@ def calculate_split_percentages(agents: dict, book_total: float) -> dict:
 
 def format_split_explanation(agents: dict, splits: dict, book_total: float) -> str:
     """
-    Generate human-readable explanation of the split calculation.
+    Generate simple one-line explanation of the split calculation.
 
     Args:
         agents: dict mapping agent_name -> {net, num_players, ...}
@@ -111,45 +111,34 @@ def format_split_explanation(agents: dict, splits: dict, book_total: float) -> s
         book_total: total house profit for the week
 
     Returns:
-        str: formatted explanation
+        str: single-line explanation
     """
-
-    explanation = []
 
     # Check which rule was applied
     split_values = sorted(set(splits.values()), reverse=True)
 
     if len(split_values) == 1:
         # Even split
-        pct = split_values[0] * 100
-        explanation.append(f"Even split: {pct:.1f}% / {pct:.1f}% / {pct:.1f}%")
-        explanation.append("(Standard weekly settlement)")
+        return "Standard splits this week"
 
     elif 0.45 in split_values:
         # Combined rule (45/35/15)
         winner = [n for n, s in splits.items() if s == 0.45][0]
-        middle = [n for n, s in splits.items() if s == 0.35][0]
         low = [n for n, s in splits.items() if s == 0.15][0]
-        explanation.append(f"Combined rule applied: {winner} 45%, {middle} 35%, {low} 15%")
-        explanation.append(f"({winner} dominant winner + {low} low exposure)")
+        return f"{winner} had a great week, {low} didn't have enough volume"
 
     elif 0.20 in split_values:
-        # Low exposure rule (40/40/20) - check this before dominant winner since both have 40%
+        # Low exposure rule (40/40/20)
         low_agents = [n for n, s in splits.items() if s == 0.20]
-        for name in low_agents:
-            num_players = agents[name]["num_players"]
-            net = abs(agents[name]["net"])
-            explanation.append(f"Low exposure rule: {name} 20%, others 40% each")
-            explanation.append(f"({name} had {num_players} players and ${net:.2f} total)")
+        low_agent = low_agents[0]
+        return f"{low_agent} didn't have enough players or volume"
 
     elif 0.40 in split_values and 0.30 in split_values:
         # Dominant winner rule (40/30/30)
         winner = [n for n, s in splits.items() if s == 0.40][0]
-        winner_net = agents[winner]["net"]
-        explanation.append(f"Dominant winner rule: {winner} 40%, others 30% each")
-        explanation.append(f"({winner} had ${winner_net:.2f} = {(winner_net/book_total*100):.1f}% of ${book_total:.2f} total)")
+        return f"{winner} had a great week"
 
-    return "\n".join(explanation)
+    return "Standard splits this week"
 
 
 def calculate_final_balances(agents: dict, book_total: float, splits: dict) -> dict:

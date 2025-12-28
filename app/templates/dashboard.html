@@ -10,6 +10,7 @@
       <div class="pill">
         Book total: <b>{{ "{:,.2f}".format(book_total) }}</b>
       </div>
+      <a href="/stats" style="color: var(--blue); text-decoration: none; font-size: 14px;">Stats</a>
       <a href="/upload" style="color: var(--blue); text-decoration: none; font-size: 14px;">Upload</a>
       <a href="/manage" style="color: var(--blue); text-decoration: none; font-size: 14px;">Manage</a>
     </div>
@@ -53,13 +54,6 @@
 <div class="card" style="margin-top: 12px;">
   <h3>Settlement Transfers</h3>
 
-  {% if split_info and split_info.explanation %}
-  <div style="margin-bottom: 12px; padding: 10px; background: rgba(52, 199, 89, 0.08); border: 1px solid rgba(52, 199, 89, 0.2); border-radius: 8px;">
-    <div style="font-weight: 600; margin-bottom: 4px; font-size: 12px; color: rgba(255,255,255,0.7);">Split Calculation</div>
-    <div style="white-space: pre-line; line-height: 1.5; color: rgba(255,255,255,0.85); font-size: 12px;">{{ split_info.explanation }}</div>
-  </div>
-  {% endif %}
-
   {% if transfers and transfers|length > 0 %}
     <table class="table" style="margin-top: 8px;">
       <thead>
@@ -82,9 +76,15 @@
 
     <div class="footer-note">
       This is the simplest way to equalize everyone's take for the week.
+      {% if split_info and split_info.explanation %}
+      <br>{{ split_info.explanation }}
+      {% endif %}
     </div>
   {% else %}
     <div class="muted">No transfers needed — everyone is even.</div>
+    {% if split_info and split_info.explanation %}
+    <div class="footer-note">{{ split_info.explanation }}</div>
+    {% endif %}
   {% endif %}
 </div>
 

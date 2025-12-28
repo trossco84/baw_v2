@@ -36,20 +36,21 @@ def compute_dashboard(rows, conn=None):
         agent = r["agent"]
         week_amt = float(r["week_amount"] or 0.0)
 
-        # House profit
-        profit = -week_amt
-        book_total += profit
+        # Agent net: positive = agent wins (we owe them), negative = agent loses (they owe us)
+        # Note: week_amt already has correct sign from DB
+        agent_net = week_amt
+        book_total += agent_net
 
-        action = "Pay" if profit < 0 else "Request"
-        abs_amt = abs(profit)
+        action = "Pay" if agent_net > 0 else "Request"
+        abs_amt = abs(agent_net)
 
         agents.setdefault(agent, {"players": [], "net": 0.0, "num_players": 0})
-        agents[agent]["net"] += profit
+        agents[agent]["net"] += agent_net
         agents[agent]["num_players"] += 1
 
         agents[agent]["players"].append({
             **r,
-            "profit": profit,
+            "profit": agent_net,
             "action": action,
             "abs_amount": abs_amt,
         })
