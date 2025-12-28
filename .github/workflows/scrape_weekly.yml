@@ -1,37 +1,19 @@
-name: Scrape NoJuice Weekly Figures
+name: Scrape NoJuice Weekly Figures (Run on Fly)
 
 on:
   schedule:
-    # Every Monday at 7:00am ET
-    # 12:00 UTC = 7:00am ET (standard time)
-    - cron: "0 12 * * 1"
-
-  # Allows manual runs from GitHub UI
+    - cron: "0 12 * * 1"   # keep your current time for now
   workflow_dispatch: {}
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          python -m playwright install --with-deps chromium
-
-      - name: Run scraper
+      - name: Run scraper inside Fly
         env:
-          NOJUICE_URL: https://www.nojuice.ag
-          NOJUICE_USERNAME: ${{ secrets.NOJUICE_USERNAME }}
-          NOJUICE_PASSWORD: ${{ secrets.NOJUICE_PASSWORD }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          python -m scripts.scrape_last_week
+          fly ssh console -a baw-v2 -C "xvfb-run -a python -m scripts.scrape_last_week"

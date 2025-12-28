@@ -5,6 +5,7 @@ import json
 import datetime as dt
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Tuple
+from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
@@ -31,11 +32,9 @@ def _parse_money(x: str) -> float:
     if s == "":
         return 0.0
     s = s.replace("$", "").replace(",", "")
-    # some cells show "-0" or "-0.00"
     try:
         return float(s)
     except ValueError:
-        # last resort: pull first number-like token
         m = re.search(r"-?\d+(\.\d+)?", s)
         return float(m.group(0)) if m else 0.0
 
@@ -55,17 +54,101 @@ def _infer_week_id_from_headers(header_texts: List[str], now: Optional[dt.date] 
 
     if mm is None:
         # fallback: previous week's Monday (week close use case)
-        # Monday=0
         today = now
         last_monday = today - dt.timedelta(days=today.weekday())
         return last_monday - dt.timedelta(days=7)
 
-    # infer year (handles year boundaries)
     candidate = dt.date(now.year, mm, dd)
-    # if candidate is > ~30 days in the future relative to now, it's probably last year
     if candidate - now > dt.timedelta(days=30):
         candidate = dt.date(now.year - 1, mm, dd)
     return candidate
+
+
+def _dump_debug(page, label: str) -> None:
+    """
+    Writes artifacts/{label}.png and artifacts/{label}.html for inspection in CI.
+    """
+    Path("artifacts").mkdir(exist_ok=True)
+    try:
+        page.screenshot(path=f"artifacts/{label}.png", full_page=True)
+    except Exception:
+        pass
+    try:
+        with open(f"artifacts/{label}.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+    except Exception:
+        pass
+
+
+def _try_click_weekly_figures(page) -> None:
+    """
+    Navigate to Weekly Figures robustly.
+    Handles cases where the menu item exists but is inside a collapsed sidebar/menu.
+    """
+    def _open_any_menu() -> None:
+        # Common hamburger/toggler patterns
+        candidates = [
+            '[aria-label*="menu" i]',
+            'button:has-text("Menu")',
+            'button:has-text("MENU")',
+            '.navbar-toggler',
+            '.menu-toggle',
+            '.sidebar-toggle',
+            '.hamburger',
+            'button:has(i.fa-bars)',
+            'a:has(i.fa-bars)',
+            'button:has(span:has-text("☰"))',
+            'text=☰',
+        ]
+        for sel in candidates:
+            try:
+                loc = page.locator(sel)
+                if loc.count() > 0 and loc.first.is_visible():
+                    loc.first.click()
+                    page.wait_for_timeout(800)
+                    return
+            except Exception:
+                continue
+
+    # We'll retry for a bit because UI hydration + responsive layout can change visibility.
+    for _ in range(25):  # ~25s total
+        wf = page.get_by_text("Weekly Figures", exact=False).first
+
+        # If it's visible, click it normally.
+        if wf.is_visible():
+            wf.click()
+            return
+
+        # If it's in the DOM but not visible, the menu is likely collapsed. Try opening.
+        _open_any_menu()
+
+        # Another common pattern: sidebar exists but needs hover/focus—scroll it into view
+        try:
+            wf.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
+
+        page.wait_for_timeout(1000)
+
+    # As a fallback, click the nearest clickable ancestor (like the <a> or <li> wrapping the span)
+    try:
+        span = page.locator('span.menu-title', has_text=re.compile(r"Weekly Figures", re.I)).first
+        if span.count() > 0:
+            # Try parent <a>
+            parent_a = span.locator("xpath=ancestor::a[1]")
+            if parent_a.count() > 0 and parent_a.first.is_visible():
+                parent_a.first.click()
+                return
+            # Try parent <li>
+            parent_li = span.locator("xpath=ancestor::li[1]")
+            if parent_li.count() > 0 and parent_li.first.is_visible():
+                parent_li.first.click()
+                return
+    except Exception:
+        pass
+
+    _dump_debug(page, "weekly_figures_click_failed")
+    raise RuntimeError("Could not click Weekly Figures (present but not visible/clickable). See artifacts/.")
 
 
 def scrape_week_last_week() -> Tuple[dt.date, List[ScrapedRow]]:
@@ -82,51 +165,123 @@ def scrape_week_last_week() -> Tuple[dt.date, List[ScrapedRow]]:
     if not username or not password:
         raise RuntimeError("Missing NOJUICE_USERNAME / NOJUICE_PASSWORD in environment")
 
+    # Debug knobs
+    headless = os.getenv("PW_HEADLESS", "1") != "0"
+    slow_mo = int(os.getenv("PW_SLOW_MO", "0"))
+    pause = os.getenv("PW_PAUSE", "0") == "1"
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        browser = p.chromium.launch(headless=headless, slow_mo=slow_mo)
+        context = browser.new_context()
+        page = context.new_page()
+        page.set_default_timeout(60000)
+
+        def _is_on_login() -> bool:
+            try:
+                u = page.locator('input[name="customerID"]')
+                pw = page.locator('input[name="Password"]')
+                btn = page.locator('button[data-action="login"]')
+                return u.count() > 0 and u.first.is_visible() and pw.count() > 0 and pw.first.is_visible() and btn.count() > 0
+            except Exception:
+                return False
+
+        def _do_login() -> None:
+            page.wait_for_selector('input[name="customerID"]', timeout=60000)
+            page.fill('input[name="customerID"]', username)
+            page.fill('input[name="Password"]', password)
+
+            login_btn = page.locator('button[data-action="login"]').first
+            login_btn.click()
+
+            # JS-heavy app: don’t rely on navigation. Wait for the login form to disappear.
+            for _ in range(60):  # up to ~60s
+                if not _is_on_login():
+                    return
+                # if SweetAlert error pops, fail fast
+                if page.locator(".swal2-container, .swal-modal").count() > 0:
+                    _dump_debug(page, "login_swal_error")
+                    raise RuntimeError("Login error popup detected (see artifacts).")
+                page.wait_for_timeout(1000)
+
+            _dump_debug(page, "login_still_visible")
+            raise RuntimeError("Still on login screen after clicking LOGIN (see artifacts).")
+
+        def _click_weekly_figures_tile() -> None:
+            """
+            Click the *tile* itself (not the hidden menu/title span).
+            In your captured HTML the tile is:
+              div.ic-square[data-action="get-weekly-figure"]
+            """
+            # Wait until the tile grid exists
+            page.wait_for_selector(".menu-icons-panel, .squares-items, div.ic-square", timeout=60000)
+
+            tile = page.locator('div.ic-square[data-action="get-weekly-figure"]').first
+            try:
+                tile.wait_for(state="visible", timeout=30000)
+            except Exception:
+                _dump_debug(page, "weekly_figures_tile_not_visible")
+                raise RuntimeError("Weekly Figures tile not visible (see artifacts).")
+
+            # Normal click first
+            try:
+                tile.scroll_into_view_if_needed()
+                tile.click(timeout=30000)
+                return
+            except Exception:
+                # Fallback: JS click (handles overlays / weird event handlers)
+                try:
+                    page.evaluate("el => el.click()", tile)
+                    return
+                except Exception:
+                    _dump_debug(page, "weekly_figures_click_failed")
+                    raise RuntimeError("Could not click Weekly Figures tile (see artifacts).")
+
+        # --- Start ---
         page.goto(base_url, wait_until="domcontentloaded")
 
-        # --- Login screen ---
-        # We don't know input names; use first two inputs on the page (common for this UI).
-        page.wait_for_timeout(300)  # tiny buffer for heavy background
-        inputs = page.locator("input")
-        if inputs.count() < 2:
-            raise RuntimeError("Could not find login inputs")
+        # Always login each run (sessions are flaky on this site)
+        if _is_on_login():
+            _do_login()
 
-        inputs.nth(0).fill(username)
-        inputs.nth(1).fill(password)
+            # Sometimes first click doesn’t take; retry once if still on login
+            if _is_on_login():
+                page.wait_for_timeout(1500)
+                _do_login()
 
-        # Click LOGIN button
-        page.get_by_role("button", name=re.compile(r"login", re.IGNORECASE)).click()
+        # Optional: pause here when debugging in headed mode
+        if pause and not headless:
+            page.pause()
 
-        # --- Landing tiles ---
-        # Wait for tiles and click Weekly Figures
+        # At this point we should be “inside” — wait for the tiles area to render
         try:
-            page.get_by_text("Weekly Figures", exact=False).wait_for(timeout=15000)
+            page.wait_for_selector(".menu-icons-panel, .squares-items, div.ic-square", timeout=60000)
         except PWTimeoutError:
-            raise RuntimeError("Login may have failed: Weekly Figures tile not found")
+            _dump_debug(page, "post_login_no_tiles")
+            raise RuntimeError("Logged in but did not see landing tiles (see artifacts).")
 
-        page.get_by_text("Weekly Figures", exact=False).click()
+        # Click Weekly Figures tile via data-action
+        _click_weekly_figures_tile()
 
-        # --- Weekly Figures page ---
-        # Click "Last Week" tab
-        page.get_by_text("Last Week", exact=True).click()
-
-        # Wait for table to render
-        # There are usually 2 tables (summary + detail). We'll scrape the detail table that has "Customer" header.
-        # Wait for any table header to appear after clicking Last Week
+        # Click "Last Week"
         try:
-            page.wait_for_selector("table thead tr th", timeout=45000)
+            page.get_by_text("Last Week", exact=True).click()
+        except Exception:
+            try:
+                page.get_by_text("Last Week", exact=False).first.click()
+            except Exception:
+                _dump_debug(page, "last_week_tab_not_found")
+                raise RuntimeError("Could not click 'Last Week' tab (see artifacts).")
+
+        # Wait for table headers
+        try:
+            page.wait_for_selector("table thead tr th", timeout=60000)
         except PWTimeoutError:
-            page.screenshot(path="debug_no_table_headers.png", full_page=True)
-            raise RuntimeError("No table headers found after selecting Last Week. Screenshot: debug_no_table_headers.png")
+            _dump_debug(page, "no_table_headers_after_last_week")
+            raise RuntimeError("No table headers found after selecting Last Week (see artifacts).")
 
-        # Sometimes the page has multiple tables; wait until at least one has multiple header cells
-        page.wait_for_timeout(500)  # small buffer for JS repaint
+        page.wait_for_timeout(500)
 
-
-        # Find the table that contains the header "Customer"
+        # Find the table that contains Customer + Week
         tables = page.locator("table")
         target_table = None
         target_headers = None
@@ -138,34 +293,29 @@ def scrape_week_last_week() -> Tuple[dt.date, List[ScrapedRow]]:
                 continue
 
             headers = [ths.nth(j).inner_text().strip() for j in range(ths.count())]
-            norm = [h.lower() for h in headers]
-
-            # Look for the column names we need (Customer + Week)
+            norm = [h.strip().lower() for h in headers]
             if "customer" in norm and "week" in norm:
                 target_table = t
                 target_headers = headers
                 break
 
-        if target_table is None:
-            page.screenshot(path="debug_tables_found.png", full_page=True)
-            raise RuntimeError("Could not find a table with headers including Customer + Week. Screenshot: debug_tables_found.png")
+        if target_table is None or target_headers is None:
+            _dump_debug(page, "target_table_not_found")
+            raise RuntimeError("Could not find a table with headers including Customer + Week (see artifacts).")
 
-        header_texts = target_headers
+        week_id = _infer_week_id_from_headers(target_headers)
 
-        week_id = _infer_week_id_from_headers(header_texts)
-
-        # Map column indexes
-        # Expected: Customer ... Week ... (we need Week index)
-        norm_headers = [h.strip().lower() for h in header_texts]
+        norm_headers = [h.strip().lower() for h in target_headers]
         try:
             customer_idx = norm_headers.index("customer")
             week_idx = norm_headers.index("week")
         except ValueError:
-            raise RuntimeError(f"Could not locate Customer/Week columns in headers: {header_texts}")
+            _dump_debug(page, "customer_week_col_missing")
+            raise RuntimeError(f"Could not locate Customer/Week columns in headers: {target_headers} (see artifacts).")
 
-        # Scrape body rows
         rows_out: List[ScrapedRow] = []
         body_rows = target_table.locator("tbody tr")
+
         for r in range(body_rows.count()):
             tr = body_rows.nth(r)
             tds = tr.locator("td")
@@ -175,26 +325,23 @@ def scrape_week_last_week() -> Tuple[dt.date, List[ScrapedRow]]:
             customer = tds.nth(customer_idx).inner_text().strip()
             m = PYR_RE.match(customer)
             if not m:
-                continue  # skip agent totals, section headers, etc.
+                continue
 
             player_id = f"pyr{m.group(1)}".lower()
             week_val_raw = tds.nth(week_idx).inner_text().strip()
             week_amount = _parse_money(week_val_raw)
-
-            # capture raw row for debugging
-            row_payload = {
-                "customer": customer,
-                "week_cell": week_val_raw,
-                "cells": [tds.nth(i).inner_text().strip() for i in range(tds.count())],
-                "headers": header_texts,
-            }
 
             rows_out.append(
                 ScrapedRow(
                     week_id=week_id,
                     player_id=player_id,
                     week_amount=round(week_amount, 2),
-                    raw_payload=row_payload,
+                    raw_payload={
+                        "customer": customer,
+                        "week_cell": week_val_raw,
+                        "cells": [tds.nth(i).inner_text().strip() for i in range(tds.count())],
+                        "headers": target_headers,
+                    },
                 )
             )
 
@@ -213,7 +360,6 @@ def upsert_weekly_raw(week_id: dt.date, rows: List[ScrapedRow]) -> int:
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
 
-    # Ensure week exists
     cur.execute(
         "insert into weeks (week_id) values (%s) on conflict (week_id) do nothing",
         (week_id.isoformat(),),
