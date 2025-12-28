@@ -6,7 +6,7 @@
       <h1>BAW Weekly Close</h1>
       <div class="sub">Week of {{ current_week }} - Settlement Summary</div>
     </div>
-    <div style="display: flex; gap: 12px; align-items: center;">
+    <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
       <div class="pill">
         Book total: <b>{{ "{:,.2f}".format(book_total) }}</b>
       </div>
@@ -378,4 +378,60 @@
 {% endif %}
 
 </div>
+
+<style>
+  /* Mobile-specific improvements */
+  @media (max-width: 768px) {
+    /* Better text wrapping in footer notes */
+    .footer-note {
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }
+
+    /* Tighter player table for mobile */
+    .table thead th:nth-child(1) { width: 40% !important; } /* Player name */
+    .table thead th:nth-child(2) { width: 18% !important; } /* Action */
+    .table thead th:nth-child(3) { width: 22% !important; } /* Amount */
+    .table thead th:nth-child(4),
+    .table thead th:nth-child(5) { width: 10% !important; } /* Checkboxes */
+
+    /* Smaller player ID text */
+    .table td .muted {
+      font-size: 10px !important;
+    }
+
+    /* Reduce card padding on mobile */
+    .card {
+      padding: 12px 10px;
+    }
+
+    .card h3 {
+      font-size: 13px;
+    }
+
+    /* Controls section wrap better */
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .controls .pill {
+      text-align: center;
+    }
+  }
+
+  @media (max-width: 480px) {
+    /* Extra small screens - hide player IDs */
+    .table td .muted {
+      display: none;
+    }
+
+    /* Even tighter spacing */
+    th, td {
+      padding: 6px 4px !important;
+    }
+  }
+</style>
 {% endblock %}

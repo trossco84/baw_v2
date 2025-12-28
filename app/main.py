@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Query, Form, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from app.auth import basic_auth
 from app.models import (
     Agent, AgentCreate, AgentUpdate,
@@ -17,6 +18,9 @@ from engine.translate import translate_admin_export
 
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
+
+# Mount static files for agent images
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 def get_db():
     return psycopg2.connect(os.getenv("DATABASE_URL"))

@@ -35,9 +35,13 @@
       </div>
 
       <div class="card-top">
-        <!-- Left: Placeholder for image/icon -->
+        <!-- Left: Agent profile image -->
         <div class="agent-avatar">
-          <div class="avatar-placeholder">{{ stats.name[0] }}</div>
+          <img src="/static/{{ stats.name.lower() }}.jpg"
+               alt="{{ stats.name }}"
+               class="avatar-image {% if stats.name.lower() == 'orso' %}avatar-zoomed-out{% endif %}"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div class="avatar-placeholder" style="display: none;">{{ stats.name[0] }}</div>
         </div>
 
         <!-- Right: Key characteristics -->
@@ -225,6 +229,20 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+  }
+
+  .avatar-image {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--blue);
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  }
+
+  .avatar-zoomed-out {
+    transform: scale(0.85);
   }
 
   .avatar-placeholder {
