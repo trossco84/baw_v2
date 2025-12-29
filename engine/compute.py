@@ -77,9 +77,13 @@ def compute_dashboard(rows, conn=None):
         a["split_percentage"] = splits.get(agent_name, 0.0)
         a["settlement"] = a["net"] - a["final_balance"]  # >0 pays, <0 receives
 
-        # Sort players: Pay then Request, then Name A-Z
+        # Sort players: Pay then Request, then by Amount (descending), then Name A-Z
         action_order = {"Pay": 0, "Request": 1}
-        a["players"].sort(key=lambda p: (action_order[p["action"]], (p.get("display_name") or "").lower()))
+        a["players"].sort(key=lambda p: (
+            action_order[p["action"]],
+            -p["abs_amount"],  # Negative for descending (largest first)
+            (p.get("display_name") or "").lower()
+        ))
 
     transfers = compute_transfers(agents)
 
