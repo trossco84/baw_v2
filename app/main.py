@@ -162,6 +162,11 @@ def toggle_status(
     conn.close()
     return {"ok": True}
 
+@app.get("/health")
+def health_check():
+    """Public health check endpoint for monitoring (no auth required)"""
+    return {"status": "ok", "service": "baw-v2"}
+
 @app.get("/health/auth-config")
 def auth_config(user=Depends(basic_auth)):
     return {

@@ -36,13 +36,11 @@ def compute_dashboard(rows, conn=None):
         agent = r["agent"]
         week_amt = float(r["week_amount"] or 0.0)
 
-        # Agent perspective (opposite of player):
-        # DB: positive week_amt = player won (bad for agent)
-        # DB: negative week_amt = player lost (good for agent)
-        # So we negate to get agent's perspective:
-        # agent_net positive = agent revenue (player lost, owes us)
-        # agent_net negative = agent owes player (player won)
-        agent_net = -week_amt
+        # Sign convention from Excel/DB:
+        # POSITIVE week_amt = player LOST money = agent REVENUE (good for agent)
+        # NEGATIVE week_amt = player WON money = agent OWES (bad for agent)
+        # agent_net directly equals week_amt (no negation needed!)
+        agent_net = week_amt
         book_total += agent_net
 
         # Action from agent's perspective:
