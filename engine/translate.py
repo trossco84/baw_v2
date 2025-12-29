@@ -36,6 +36,10 @@ def translate_admin_export(path: str) -> pd.DataFrame:
 
     week_id = infer_week_id(df)
 
+    # Excel sign convention (from bookie software):
+    # POSITIVE value = player LOST (agent won / agent revenue)
+    # NEGATIVE value = player WON (agent owes player / agent loss)
+    # This matches our desired DB convention, so NO negation needed
     out = pd.DataFrame({
         "player_id": df["Customer"].str.lower(),
         "week_amount": df["Week"].apply(normalize_week_amount),
