@@ -36,12 +36,19 @@ def compute_dashboard(rows, conn=None):
         agent = r["agent"]
         week_amt = float(r["week_amount"] or 0.0)
 
-        # Agent net: positive = agent wins (we owe them), negative = agent loses (they owe us)
-        # Note: week_amt already has correct sign from DB
-        agent_net = week_amt
+        # Agent perspective (opposite of player):
+        # DB: positive week_amt = player won (bad for agent)
+        # DB: negative week_amt = player lost (good for agent)
+        # So we negate to get agent's perspective:
+        # agent_net positive = agent revenue (player lost, owes us)
+        # agent_net negative = agent owes player (player won)
+        agent_net = -week_amt
         book_total += agent_net
 
-        action = "Pay" if agent_net > 0 else "Request"
+        # Action from agent's perspective:
+        # Positive agent_net = agent revenue (player lost) → Request payment from player
+        # Negative agent_net = agent loss (player won) → Pay the player
+        action = "Request" if agent_net > 0 else "Pay"
         abs_amt = abs(agent_net)
 
         agents.setdefault(agent, {"players": [], "net": 0.0, "num_players": 0})
